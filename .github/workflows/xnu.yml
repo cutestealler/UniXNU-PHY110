@@ -20,7 +20,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   # build.sh asks interactively which macOS SDK to target when this is unset;
@@ -99,3 +99,15 @@ jobs:
             tail -80 xnu-build.log 2>/dev/null || echo 'no xnu-build.log'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish log to ci-logs branch
+        if: always()
+        run: |
+          mkdir -p logs
+          cp xnu-build.log "logs/xnu-build-${{ github.run_id }}.log" 2>/dev/null || echo "no log" > "logs/xnu-build-${{ github.run_id }}.log"
+          git config user.name  "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git checkout -B ci-logs
+          git add logs
+          git commit -m "ci log ${{ github.run_id }}" || true
+          git push -f origin ci-logs
