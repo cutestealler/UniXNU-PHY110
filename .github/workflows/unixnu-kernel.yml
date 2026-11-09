@@ -1,0 +1,232 @@
+name: PHY110 UniXNU kernel (official path)
+
+# Builds kernel.macho the way UniXNU intends: ./unixnu applies its own xnu patches,
+# builds with Xcode, and prelinks against the target IPSW's kernelcache. Runs on a
+# GitHub macOS runner, so no Mac is needed locally.
+#
+# Self-reporting: the run appends its result to ci/last-run.md and pushes it back,
+# so the outcome can be read with a plain `git fetch` (no API access needed).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'configs/**'
+      - 'ci/**'
+      - 'uefi/**'
+      - 'board.toml'
+      - '.github/workflows/unixnu-kernel.yml'
+  workflow_dispatch:
+    inputs:
+      ipsw_url:
+        description: IPSW to take the kernelcache from (leave empty for board.toml's)
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phy110-kernel
+  cancel-in-progress: true
+
+jobs:
+  kernel:
+    runs-on: macos-14
+    timeout-minutes: 180
+    env:
+      REPORT: ci/last-run.md
+    steps:
+      - name: Checkout the port
+        uses: actions/checkout@v4
+        with:
+          path: port
+
+      - name: Checkout the UniXNU build driver
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: UniXNU
+
+      - name: Toolchain
+        run: |
+          brew install cmake ninja unifdef llvm mtools dtc || true
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          python3 --version
+
+      - name: Select the device config
+        working-directory: UniXNU
+        run: |
+          ./unixnu defconfig PHY110_defconfig -D ../port
+          ./unixnu status || true
+
+      - name: Fetch sources
+        working-directory: UniXNU
+        run: ./unixnu fetch
+
+      - name: Fetch IPSW members
+        working-directory: UniXNU
+        run: |
+          if [ -n "${{ github.event.inputs.ipsw_url }}" ]; then
+            ./unixnu ipsw fetch --ipsw "${{ github.event.inputs.ipsw_url }}"
+          else
+            ./unixnu ipsw fetch || ./unixnu ipsw fetch --help
+          fi
+
+      - name: Authenticate the Apple source fetch
+        working-directory: UniXNU
+        env:
+          GH_TOKEN_FOR_FETCH: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # scripts/prepare-xnu-source.py lists three Apple directories through the
+          # GitHub API with plain urllib, which runs into the anonymous rate limit of
+          # the shared runner IP (HTTP 403). Give those calls the runner's token.
+          python3 - <<'EOF'
+          import os, pathlib
+          p = pathlib.Path("scripts/prepare-xnu-source.py")
+          s = p.read_text()
+          if "GH_TOKEN_FOR_FETCH" not in s:
+              inject = """_tok = os.environ.get('GH_TOKEN_FOR_FETCH')
+          if _tok:
+              _orig = urllib.request.urlopen
+              def _open(url, *a, **kw):
+                  req = urllib.request.Request(url if isinstance(url, str) else url)
+                  req.add_header('Authorization', 'Bearer ' + _tok)
+                  return _orig(req, *a, **kw)
+              urllib.request.urlopen = _open
+          """
+              s = s.replace("import urllib.request",
+                            "import urllib.request\n" + inject, 1)
+              p.write_text(s)
+              print("patched prepare-xnu-source.py")
+          else:
+              print("already patched")
+          EOF
+
+      - name: Allow the kernel config to be selected
+        working-directory: UniXNU
+        run: |
+          # build-xnu-4k-baseline.sh hardcodes KERNEL_CONFIGS=DEVELOPMENT, which pulls
+          # in every DriverKit iig translation unit; RELEASE usually does not.
+          sed -i '' 's/KERNEL_CONFIGS=DEVELOPMENT/KERNEL_CONFIGS=${XNU_KERNEL_CONFIG:-DEVELOPMENT}/g' \
+            scripts/build-xnu-4k-baseline.sh
+          sed -i '' 's/MACHINE_CONFIGS=BCM2837/MACHINE_CONFIGS=${XNU_MACHINE_CONFIG:-BCM2837}/g' \
+            scripts/build-xnu-4k-baseline.sh
+          grep -n 'MACHINE_CONFIGS=\|KERNEL_CONFIGS=' scripts/build-xnu-4k-baseline.sh | head -6
+
+      - name: Hook the tree patch into the build
+        working-directory: UniXNU
+        env:
+          GH_TOKEN_FOR_FETCH: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The build runs out/<board>/tree/scripts/build-xnu-4k-baseline.sh, not the
+          # copy in the UniXNU clone, so install the hook into every copy that exists
+          # and insert the call before UniXNU's source prepare step.
+          HOOK=../port/ci/patch-tree.sh
+          CACHE=../port/ci/xnu-cache
+          for D in scripts out/PHY110/tree/scripts; do
+            [ -d "$D" ] || { echo "skip $D (missing)"; continue; }
+            cp "$HOOK" "$D/phy110-patch-tree.sh"
+            chmod +x "$D/phy110-patch-tree.sh"
+            rm -rf "$D/phy110-xnu-cache"
+            cp -r "$CACHE" "$D/phy110-xnu-cache"
+            B="$D/build-xnu-4k-baseline.sh"
+            [ -f "$B" ] || { echo "skip $B (missing)"; continue; }
+            python3 - "$B" <<'EOF'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text()
+          marker = "python3 scripts/prepare-xnu-source.py"
+          call = "bash scripts/phy110-patch-tree.sh"
+          if call in s:
+              print("already hooked:", p)
+          elif marker in s:
+              p.write_text(s.replace(marker, call + "\n" + marker, 1))
+              print("hooked:", p)
+          else:
+              print("marker missing in", p)
+          EOF
+          done
+
+      - name: Provide the display kit stubs
+        working-directory: UniXNU
+        run: |
+          # build-xnu-4k-baseline.sh expects the display kits as prebuilt archives and
+          # aborts on test -f when they are missing. Compile a stub archive that
+          # defines the three probes the patched sources reference, so the link can
+          # finish; the real kit comes later.
+          ROOT=out/PHY110/tree
+          mkdir -p "$ROOT/build/native-legacy-display" "$ROOT/build/native-mobile-display"
+          cat > /tmp/display-stub.c <<'EOF'
+          /* PHY110: link stubs for the display kit probes. */
+          int native_legacy_display_probe(void) { return 1; }
+          int native_legacy_display_late_probe(void) { return 1; }
+          int native_mobile_display_provider_probe(void) { return 1; }
+          EOF
+          xcrun -sdk iphoneos clang -target arm64-apple-ios17.0 -c /tmp/display-stub.c -o /tmp/display-stub.o
+          ar rcs "$ROOT/build/native-legacy-display/libNativeLegacyDisplay.late.a" /tmp/display-stub.o
+          cp "$ROOT/build/native-legacy-display/libNativeLegacyDisplay.late.a" \
+             "$ROOT/build/native-mobile-display/libNativeMobileDisplay.late.a"
+          ls -l "$ROOT/build/native-legacy-display" "$ROOT/build/native-mobile-display"
+          nm -g "$ROOT/build/native-mobile-display/libNativeMobileDisplay.late.a" | head
+
+      - name: Build and prelink the kernel
+        working-directory: UniXNU
+        env:
+          # bindfs uses BINDM_FORCE_ROOT, an Apple-internal mount flag that is
+          # absent from the open source tree; nothing sets it, so an unused bit
+          # compiles and behaves identically. Keep build.sh's own warning flags.
+          XNU_KERNEL_CONFIG: DEVELOPMENT
+          XNU_MACHINE_CONFIG: BCM2837
+          XNU_EXTRA_CFLAGS: '-Wno-reserved-identifier -Wno-pre-c11-compat -Wno-missing-designated-field-initializers -Wno-suggest-override -Wno-unnecessary-virtual-specifier -Wno-suggest-destructor-override -Wno-ms-bitfield-padding -DBINDM_FORCE_ROOT=0x80000000U'
+        run: |
+          set -o pipefail
+          ./unixnu build kernel 2>&1 | tee ../kernel.log
+
+      - name: Publish the report back to the repository
+        if: always()
+        run: |
+          cd port
+          mkdir -p ci
+          {
+            echo "# 最近一次内核构建"
+            echo
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 时间 | $(date -u +%FT%TZ) |"
+            echo "| 提交 | \`${GITHUB_SHA}\` |"
+            echo "| 触发 | ${GITHUB_EVENT_NAME} |"
+            echo "| 作业状态 | ${JOB_STATUS} |"
+            echo
+            echo "## 产物"
+            echo
+            echo '```'
+            ls -l ../UniXNU/out/PHY110/kernel/ 2>/dev/null || echo "(没有 kernel 输出)"
+            echo '```'
+            echo
+            echo "## kernel.log 末尾 150 行"
+            echo
+            echo '```'
+            tail -150 ../kernel.log 2>/dev/null || echo "(没有日志)"
+            echo '```'
+          } > "$REPORT"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$REPORT"
+          if git diff --cached --quiet; then
+            echo "no report change"
+          else
+            git commit -m "ci: record the last kernel build [skip ci]"
+            git push
+          fi
+        env:
+          JOB_STATUS: ${{ job.status }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phy110-kernel
+          path: |
+            UniXNU/out/PHY110/kernel/
+            UniXNU/out/PHY110/logs/
+            kernel.log
+          retention-days: 14

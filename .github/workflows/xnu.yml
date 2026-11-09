@@ -1,0 +1,104 @@
+name: PHY110 XNU build
+
+# Builds the Darwin/XNU kernel for the OPPO Find X7 Ultra (SM8650) on a GitHub
+# macOS runner, so no Mac is needed. The harness is blacktop/darwin-xnu-build,
+# pinned; MACHINE_CONFIG=SWEET is the Apple machine config used by the other
+# SM8650 ports (OnePlus Ace 5 / giulia).
+on:
+  workflow_dispatch:
+    inputs:
+      machine_config:
+        description: XNU MACHINE_CONFIG (BCM2837 is what UniXNU documents; SWEET needs private patches)
+        type: string
+        default: BCM2837
+      kernel_config:
+        description: XNU KERNEL_CONFIG
+        type: choice
+        default: DEVELOPMENT
+        options: [DEVELOPMENT, RELEASE, KASAN]
+permissions:
+  contents: read
+
+env:
+  # build.sh asks interactively which macOS SDK to target when this is unset;
+  # CI has no TTY, so pin it (same value the other SM8650 port uses).
+  MACOS_VERSION: '14.6'
+  HARNESS_COMMIT: 663906528d1cd5ea8fde7de6f16de73db9511549
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the pinned XNU harness
+        run: |
+          git init -q dxb
+          git -C dxb fetch -q --depth 1 https://github.com/blacktop/darwin-xnu-build $HARNESS_COMMIT
+          git -C dxb checkout -q FETCH_HEAD
+          ls dxb
+
+      - name: Toolchain
+        run: |
+          # The harness only installs deps when any of jq/gum/xcodes/cmake/ninja is
+          # missing, and `brew install xcodes` has no bottle on arm64 macOS, so we
+          # pre-install the rest and provide a stub xcodes. Xcode itself ships with
+          # the runner, and install_deps skips `xcodes install` when it is present.
+          brew install jq gum bash cmake ninja unifdef || true
+          for d in /opt/homebrew/bin /usr/local/bin; do
+            sudo mkdir -p "$d"
+            printf '#!/bin/sh\nexit 0\n' | sudo tee "$d/xcodes" >/dev/null
+            sudo chmod +x "$d/xcodes"
+          done
+          XC=$(ls -d /Applications/Xcode_*.app | sort -V | head -1)
+          echo "DEVELOPER_DIR=$XC/Contents/Developer" >> "$GITHUB_ENV"
+          sudo xcode-select -s "$XC"
+          command -v xcodes; command -v gum; command -v jq
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version || true
+
+      - name: Apply the UniXNU patch set
+        run: |
+          # UniXNU pins xnu-10063.141.1 (Darwin 23.6) and ships the patches that make it
+          # build for a non-Apple ARM64 board (4 KiB pages, DT platform, prelink ABI).
+          git clone -q --depth 1 https://github.com/UniXNU/UniXNU.git unixnu
+          ls unixnu/patches/xnu | head -20
+          cd dxb/xnu
+          applied=0; skipped=0
+          for p in ../unixnu/patches/xnu/*.patch; do
+            if git apply --check "$p" 2>/dev/null; then
+              git apply "$p" && applied=$((applied+1))
+            else
+              skipped=$((skipped+1)); echo "skip $(basename $p)"
+            fi
+          done
+          echo "applied=$applied skipped=$skipped"
+
+      - name: Build kernel
+        working-directory: dxb
+        env:
+          MACHINE_CONFIG: ${{ inputs.machine_config }}
+          KERNEL_CONFIG: ${{ inputs.kernel_config }}
+          MACOS_VERSION: '14.6'
+        run: |
+          # the harness only lists arm64e; the phone needs plain arm64
+          sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' build.sh
+          set -o pipefail
+          bash build.sh 2>&1 | tee ../xnu-build.log
+
+      - name: Collect artifacts
+        if: always()
+        run: |
+          mkdir -p out
+          find dxb/fakeroot/System/Library/Kernels -type f -maxdepth 1 -print -exec cp {} out/ \; || true
+          ls -l out || true
+          tail -60 xnu-build.log || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phy110-xnu-${{ inputs.machine_config }}
+          path: |
+            out/
+            xnu-build.log
+          retention-days: 14
