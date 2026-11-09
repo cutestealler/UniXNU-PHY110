@@ -24,7 +24,8 @@ fi
 CONF="$ROOT/.cache/xnu-work/iokit/conf/files"
 if [ -f "$CONF" ]; then
   before=$(wc -l < "$CONF")
-  grep -v -E 'DriverKit/[A-Za-z0-9_]+\.iig\.cpp' "$CONF" > "$CONF.new" || true
+  grep -v -E 'DriverKit.*\.iig\.cpp|DriverKit.*iig' "$CONF" > "$CONF.new" || true
+  echo "PHY110: DriverKit lines left: $(grep -c -i driverkit "$CONF.new" || true)"
   mv "$CONF.new" "$CONF"
   echo "PHY110: iokit/conf/files $before -> $(wc -l < "$CONF") lines (DriverKit iig dropped)"
 fi
