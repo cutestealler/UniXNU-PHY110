@@ -62,23 +62,6 @@ jobs:
           echo "detected macOS SDK: $SDKVER"
           echo "MACOS_VERSION=$SDKVER" >> "$GITHUB_ENV"
 
-      - name: Apply the UniXNU patch set
-        run: |
-          # UniXNU pins xnu-10063.141.1 (Darwin 23.6) and ships the patches that make it
-          # build for a non-Apple ARM64 board (4 KiB pages, DT platform, prelink ABI).
-          git clone -q --depth 1 https://github.com/UniXNU/UniXNU.git unixnu
-          ls unixnu/patches/xnu | head -20
-          cd dxb/xnu
-          applied=0; skipped=0
-          for p in ../unixnu/patches/xnu/*.patch; do
-            if git apply --check "$p" 2>/dev/null; then
-              git apply "$p" && applied=$((applied+1))
-            else
-              skipped=$((skipped+1)); echo "skip $(basename $p)"
-            fi
-          done
-          echo "applied=$applied skipped=$skipped"
-
       - name: Build kernel
         working-directory: dxb
         env:
