@@ -89,3 +89,13 @@ jobs:
             out/
             xnu-build.log
           retention-days: 14
+
+      - name: Publish log tail to summary
+        if: always()
+        run: |
+          {
+            echo '## xnu build log (tail)'
+            echo '```'
+            tail -80 xnu-build.log 2>/dev/null || echo 'no xnu-build.log'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
