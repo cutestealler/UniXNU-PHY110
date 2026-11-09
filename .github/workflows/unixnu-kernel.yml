@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   kernel:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
     env:
       REPORT: ci/last-run.md
