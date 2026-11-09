@@ -25,12 +25,11 @@ permissions:
 env:
   # build.sh asks interactively which macOS SDK to target when this is unset;
   # CI has no TTY, so pin it (same value the other SM8650 port uses).
-  MACOS_VERSION: '14.6'
   HARNESS_COMMIT: 663906528d1cd5ea8fde7de6f16de73db9511549
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -59,6 +58,9 @@ jobs:
           command -v xcodes; command -v gum; command -v jq
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version || true
+          SDKVER=$(xcrun --sdk macosx --show-sdk-version | cut -d. -f1-2)
+          echo "detected macOS SDK: $SDKVER"
+          echo "MACOS_VERSION=$SDKVER" >> "$GITHUB_ENV"
 
       - name: Apply the UniXNU patch set
         run: |
@@ -82,7 +84,6 @@ jobs:
         env:
           MACHINE_CONFIG: ${{ inputs.machine_config || 'BCM2837' }}
           KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
-          MACOS_VERSION: '14.6'
         run: |
           # the harness only lists arm64e; the phone needs plain arm64
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' build.sh
