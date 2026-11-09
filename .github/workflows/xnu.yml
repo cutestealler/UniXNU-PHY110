@@ -16,8 +16,6 @@ on:
         type: choice
         default: DEVELOPMENT
         options: [DEVELOPMENT, RELEASE, KASAN]
-  push:
-    branches: [main]
 
 permissions:
   contents: write
