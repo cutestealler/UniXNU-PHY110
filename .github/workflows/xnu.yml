@@ -16,6 +16,9 @@ on:
         type: choice
         default: DEVELOPMENT
         options: [DEVELOPMENT, RELEASE, KASAN]
+  push:
+    branches: [main]
+
 permissions:
   contents: read
 
@@ -77,8 +80,8 @@ jobs:
       - name: Build kernel
         working-directory: dxb
         env:
-          MACHINE_CONFIG: ${{ inputs.machine_config }}
-          KERNEL_CONFIG: ${{ inputs.kernel_config }}
+          MACHINE_CONFIG: ${{ inputs.machine_config || 'BCM2837' }}
+          KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
           MACOS_VERSION: '14.6'
         run: |
           # the harness only lists arm64e; the phone needs plain arm64
@@ -97,7 +100,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: phy110-xnu-${{ inputs.machine_config }}
+          name: phy110-xnu-${{ inputs.machine_config || 'BCM2837' }}
           path: |
             out/
             xnu-build.log
