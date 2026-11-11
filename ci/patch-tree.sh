@@ -37,3 +37,19 @@ if [ -f "$MAKEDEF" ] && grep -q -- '-mach_msg2' "$MAKEDEF"; then
   sed -i '' 's/^\([[:space:]]*\)-mach_msg2[[:space:]]*$/\1# PHY120: -mach_msg2 dropped, unsupported by this mig/' "$MAKEDEF"
   echo "PHY120: dropped -mach_msg2 from MIGKSFLAGS"
 fi
+
+# 4. Link the display stub archives into the kernel. The workflow compiles them
+#    (build/native-*-display/libNative*.late.a) but the baseline script never
+#    passes them to the linker, so the three probes stay undefined.
+GEN="$ROOT/.cache/xnu-work/makedefs/MakeInc.def"
+LATE_LEGACY="$ROOT/build/native-legacy-display/libNativeLegacyDisplay.late.a"
+LATE_MOBILE="$ROOT/build/native-mobile-display/libNativeMobileDisplay.late.a"
+if [ -f "$GEN" ] && [ -f "$LATE_LEGACY" ]; then
+  if ! grep -q "PHY110 display stubs" "$GEN"; then
+    printf '\n# PHY110 display stubs\nLDFLAGS_KERNEL_GEN += %s %s\n' \
+      "$LATE_LEGACY" "$LATE_MOBILE" >> "$GEN"
+    echo "PHY110: display stub archives wired into LDFLAGS_KERNEL_GEN"
+  fi
+else
+  echo "PHY110: display stub archives missing (GEN=$GEN LEGACY=$LATE_LEGACY)"
+fi
