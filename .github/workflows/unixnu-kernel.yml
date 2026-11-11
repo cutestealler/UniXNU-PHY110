@@ -1,4 +1,4 @@
-name: PHY120 UniXNU kernel (official path)
+name: PHY110 UniXNU kernel (official path)
 
 # Builds kernel.macho the way UniXNU intends: ./unixnu applies its own xnu patches,
 # builds with Xcode, and prelinks against the target IPSW's kernelcache. Runs on a
@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   kernel:
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 180
     env:
       REPORT: ci/last-run.md
