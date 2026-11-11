@@ -38,18 +38,29 @@ if [ -f "$MAKEDEF" ] && grep -q -- '-mach_msg2' "$MAKEDEF"; then
   echo "PHY120: dropped -mach_msg2 from MIGKSFLAGS"
 fi
 
-# 4. Link the display stub archives into the kernel. The workflow compiles them
-#    (build/native-*-display/libNative*.late.a) but the baseline script never
-#    passes them to the linker, so the three probes stay undefined.
-GEN="$ROOT/.cache/xnu-work/makedefs/MakeInc.def"
-LATE_LEGACY="$ROOT/build/native-legacy-display/libNativeLegacyDisplay.late.a"
-LATE_MOBILE="$ROOT/build/native-mobile-display/libNativeMobileDisplay.late.a"
-if [ -f "$GEN" ] && [ -f "$LATE_LEGACY" ]; then
-  if ! grep -q "PHY110 display stubs" "$GEN"; then
-    printf '\n# PHY110 display stubs\nLDFLAGS_KERNEL_GEN += %s %s\n' \
-      "$LATE_LEGACY" "$LATE_MOBILE" >> "$GEN"
-    echo "PHY110: display stub archives wired into LDFLAGS_KERNEL_GEN"
+# 4. Provide the three display probes as a real kernel source file.
+#    build-xnu-4k-baseline.sh links native-legacy-display / native-mobile-display
+#    archives that this port does not ship, so bsd_init.c and IOUserClient.cpo
+#    reference probes nobody defines. Adding them to libkern makes the build
+#    compile and link them the ordinary way.
+STUB="$ROOT/.cache/xnu-work/libkern/native_display_stubs.c"
+CONF="$ROOT/.cache/xnu-work/libkern/conf/files"
+if [ -d "$ROOT/.cache/xnu-work/libkern" ]; then
+  cat > "$STUB" <<'STUBEOF'
+/*
+ * PHY110: display kit probes.
+ * The port does not ship the native legacy/mobile display kits, but bsd_init
+ * and IOUserClient reference these three probes. Return 0 so the callers take
+ * the "no kit" path.
+ */
+int native_legacy_display_probe(void) { return 0; }
+int native_legacy_display_late_probe(void) { return 0; }
+int native_mobile_display_provider_probe(void) { return 0; }
+STUBEOF
+  if [ -f "$CONF" ] && ! grep -q "native_display_stubs" "$CONF"; then
+    printf 'libkern/native_display_stubs.c\t\tstandard\n' >> "$CONF"
+    echo "PHY110: native_display_stubs.c added to libkern/conf/files"
   fi
 else
-  echo "PHY110: display stub archives missing (GEN=$GEN LEGACY=$LATE_LEGACY)"
+  echo "PHY110: libkern dir missing, cannot add display stubs"
 fi
