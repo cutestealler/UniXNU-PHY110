@@ -1,4 +1,4 @@
-name: PHY110 UniXNU kernel (official path)
+name: PHY120 UniXNU kernel (official path)
 
 # Builds kernel.macho the way UniXNU intends: ./unixnu applies its own xnu patches,
 # builds with Xcode, and prelinks against the target IPSW's kernelcache. Runs on a
@@ -26,7 +26,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: phy110-kernel
+  group: phy120-kernel
   cancel-in-progress: true
 
 jobs:
@@ -57,7 +57,7 @@ jobs:
       - name: Select the device config
         working-directory: UniXNU
         run: |
-          ./unixnu defconfig PHY110_defconfig -D ../port
+          ./unixnu defconfig PHY120_defconfig -D ../port
           ./unixnu status || true
 
       - name: Fetch sources
@@ -124,19 +124,19 @@ jobs:
           # and insert the call before UniXNU's source prepare step.
           HOOK=../port/ci/patch-tree.sh
           CACHE=../port/ci/xnu-cache
-          for D in scripts out/PHY110/tree/scripts; do
+          for D in scripts out/PHY120/tree/scripts; do
             [ -d "$D" ] || { echo "skip $D (missing)"; continue; }
-            cp "$HOOK" "$D/phy110-patch-tree.sh"
-            chmod +x "$D/phy110-patch-tree.sh"
-            rm -rf "$D/phy110-xnu-cache"
-            cp -r "$CACHE" "$D/phy110-xnu-cache"
+            cp "$HOOK" "$D/phy120-patch-tree.sh"
+            chmod +x "$D/phy120-patch-tree.sh"
+            rm -rf "$D/phy120-xnu-cache"
+            cp -r "$CACHE" "$D/phy120-xnu-cache"
             B="$D/build-xnu-4k-baseline.sh"
             [ -f "$B" ] || { echo "skip $B (missing)"; continue; }
             python3 - "$B" <<'EOF'
           import pathlib, sys
           p = pathlib.Path(sys.argv[1]); s = p.read_text()
           marker = "python3 scripts/prepare-xnu-source.py"
-          call = "bash scripts/phy110-patch-tree.sh"
+          call = "bash scripts/phy120-patch-tree.sh"
           if call in s:
               print("already hooked:", p)
           elif marker in s:
@@ -154,10 +154,10 @@ jobs:
           # aborts on test -f when they are missing. Compile a stub archive that
           # defines the three probes the patched sources reference, so the link can
           # finish; the real kit comes later.
-          ROOT=out/PHY110/tree
+          ROOT=out/PHY120/tree
           mkdir -p "$ROOT/build/native-legacy-display" "$ROOT/build/native-mobile-display"
           cat > /tmp/display-stub.c <<'EOF'
-          /* PHY110: link stubs for the display kit probes. */
+          /* PHY120: link stubs for the display kit probes. */
           int native_legacy_display_probe(void) { return 1; }
           int native_legacy_display_late_probe(void) { return 1; }
           int native_mobile_display_provider_probe(void) { return 1; }
@@ -200,7 +200,7 @@ jobs:
             echo "## 产物"
             echo
             echo '```'
-            ls -l ../UniXNU/out/PHY110/kernel/ 2>/dev/null || echo "(没有 kernel 输出)"
+            ls -l ../UniXNU/out/PHY120/kernel/ 2>/dev/null || echo "(没有 kernel 输出)"
             echo '```'
             echo
             echo "## kernel.log 末尾 150 行"
@@ -224,9 +224,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: phy110-kernel
+          name: phy120-kernel
           path: |
-            UniXNU/out/PHY110/kernel/
-            UniXNU/out/PHY110/logs/
+            UniXNU/out/PHY120/kernel/
+            UniXNU/out/PHY120/logs/
             kernel.log
           retention-days: 14
