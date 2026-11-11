@@ -21,13 +21,14 @@ fi
 #    -mach_msg2. iokit/conf/files marks them "optional iokitcpp", so removing the
 #    entries takes them out of the build. DriverKit is user-space driver support and
 #    is not used by anything this port boots.
-CONF="$ROOT/.cache/xnu-work/iokit/conf/files"
-if [ -f "$CONF" ]; then
-  before=$(wc -l < "$CONF")
-  grep -v -E 'DriverKit/[A-Za-z0-9_]+\.iig\.cpp' "$CONF" > "$CONF.new" || true
-  mv "$CONF.new" "$CONF"
-  echo "PHY120: iokit/conf/files $before -> $(wc -l < "$CONF") lines (DriverKit iig dropped)"
-fi
+# PHY110-DISABLED CONF="$ROOT/.cache/xnu-work/iokit/conf/files"
+# PHY110-DISABLED if [ -f "$CONF" ]; then
+# PHY110-DISABLED   before=$(wc -l < "$CONF")
+# PHY110-DISABLED   grep -v -E 'DriverKit/[A-Za-z0-9_]+\.iig\.cpp' "$CONF" > "$CONF.new" || true
+# PHY110-DISABLED   mv "$CONF.new" "$CONF"
+# PHY110-DISABLED   echo "PHY120: iokit/conf/files $before -> $(wc -l < "$CONF") lines (DriverKit iig dropped)"
+# PHY110-DISABLED fi
+
 
 # 3. MIGKSFLAGS asks for -mach_msg2, which this Xcode's mig forwards to clang,
 #    which rejects it; mig then aborts with "no SubSystem declaration".
