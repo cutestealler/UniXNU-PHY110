@@ -169,16 +169,6 @@ jobs:
           ls -l "$ROOT/build/native-legacy-display" "$ROOT/build/native-mobile-display"
           nm -g "$ROOT/build/native-mobile-display/libNativeMobileDisplay.late.a" | head
 
-      - name: Add display probe stubs to the kernel tree (best effort)
-        continue-on-error: true
-        working-directory: UniXNU
-        run: |
-          set -ux
-          ROOT=out/PHY110/tree
-          mkdir -p "$ROOT/.cache/xnu-work/libkern" || true
-          cp ../port/ci/native_display_stubs.c "$ROOT/.cache/xnu-work/libkern/" || true
-          echo "best-effort copy done (real insertion happens in patch-tree.sh during the build)"
-
       - name: Build and prelink the kernel
         working-directory: UniXNU
         env:
