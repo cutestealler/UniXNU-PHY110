@@ -79,3 +79,10 @@ props = [
   { name = "label", type = "s", value = "cont_splash_region" },
   { name = "reg", type = "x", value = ["0x0", "0xd5100000", "0x0", "0x2b00000"] },
 ]
+
+# UniXNU 组件：ArmCpu 提供 GICv3 / 通用定时器，ArmDTPlatform 提供设备树平台专家。
+# 没有这两项，内核链接时会缺 build/armcpu/libArmCpu.a 与
+# build/armdt-platform/libArmDTPlatform.a，构建脚本会直接报
+# "ArmCpu bring-up requires the real source provider and a real platform driver"。
+[components]
+include = ["ArmCpu", "ArmDTPlatform"]

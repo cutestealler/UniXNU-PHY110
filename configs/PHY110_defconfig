@@ -6,7 +6,7 @@
 # UniXNU's patches that expect the sheng board kit, which this repository does
 # not ship. Turn them back on one at a time with the matching kit.
 
-# CONFIG_XNU_SOURCE_CORECRYPTO14 is not set
+CONFIG_XNU_SOURCE_CORECRYPTO14=y
 CONFIG_XNU_SOURCE_PTHREAD=y
 CONFIG_XNU_ARM_DT_PLATFORM=y
 CONFIG_XNU_ARMCPU=y
