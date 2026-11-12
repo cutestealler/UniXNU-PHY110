@@ -2,8 +2,8 @@
 
 | 项 | 值 |
 | --- | --- |
-| 时间 | 2026-11-12T05:54:50Z |
-| 提交 | `ecbd78b859ed4279db0cd96a1d78efde6a4794e7` |
+| 时间 | 2026-11-12T06:23:44Z |
+| 提交 | `b1b8ab6b6bf101005c1255bed2f58c2b00c2cfd0` |
 | 触发 | push |
 | 作业状态 | failure |
 
@@ -21,7 +21,15 @@
 == kernel: XNU
 == kernel: bootstrap pass for the compile records
 + bash /Users/runner/work/UniXNU-PHY110/UniXNU-PHY110/UniXNU/out/PHY110/tree/scripts/build-xnu-4k-baseline.sh
-fatal: destination path '.cache/xnu-work' already exists and is not an empty directory.
-build-xnu-4k-baseline.sh: line 36: git clone --shared refer/xnu .cache/xnu-work failed
-unixnu: bash failed (128); full log: /Users/runner/work/UniXNU-PHY110/UniXNU-PHY110/UniXNU/out/PHY110/logs/kernel-bootstrap.log
+== kernel: prepare storage headers
++ python3 /Users/runner/work/UniXNU-PHY110/UniXNU-PHY110/UniXNU/out/PHY110/tree/scripts/prepare-storage-headers.py
++ bash /Users/runner/work/UniXNU-PHY110/UniXNU-PHY110/UniXNU/out/PHY110/tree/scripts/build-xnu-4k-baseline.sh
+PHY120: seeded 3 cached listings into .cache/sources
+PHY120: dropped -mach_msg2 from MIGKSFLAGS
+PHY110 stub: enter
+PHY110 stub: libkern present
+PHY110 stub: already registered
+Restored 0 omitted public headers from Apple; blob hashes verified
+Boot progress requires the audited UFS/owner-root and source-corecrypto build
+unixnu: bash failed (1); full log: /Users/runner/work/UniXNU-PHY110/UniXNU-PHY110/UniXNU/out/PHY110/logs/kernel.log
 ```
