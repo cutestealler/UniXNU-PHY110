@@ -170,6 +170,7 @@ jobs:
           nm -g "$ROOT/build/native-mobile-display/libNativeMobileDisplay.late.a" | head
 
       - name: Add display probe stubs to the kernel tree
+        working-directory: UniXNU
         run: |
           set -eux
           ROOT=out/PHY110/tree
