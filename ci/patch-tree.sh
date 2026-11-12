@@ -37,3 +37,26 @@ if [ -f "$MAKEDEF" ] && grep -q -- '-mach_msg2' "$MAKEDEF"; then
   sed -i '' 's/^\([[:space:]]*\)-mach_msg2[[:space:]]*$/\1# PHY120: -mach_msg2 dropped, unsupported by this mig/' "$MAKEDEF"
   echo "PHY120: dropped -mach_msg2 from MIGKSFLAGS"
 fi
+
+# 4. Display kit probes. Runs during the build (after xnu is unpacked), so the
+#    kernel tree exists here. Definitions go into libkern and are registered in
+#    libkern/conf/files.
+echo "PHY110 stub: enter"
+KROOT="$ROOT/.cache/xnu-work"
+if [ -d "$KROOT/libkern" ]; then
+  echo "PHY110 stub: libkern present"
+  cat > "$KROOT/libkern/native_display_stubs.c" <<'STUBEOF'
+/* PHY110: display kit probes (port ships no display kit). */
+int native_legacy_display_probe(void) { return 0; }
+int native_legacy_display_late_probe(void) { return 0; }
+int native_mobile_display_provider_probe(void) { return 0; }
+STUBEOF
+  if ! grep -q native_display_stubs "$KROOT/libkern/conf/files" 2>/dev/null; then
+    printf 'libkern/native_display_stubs.c\t\tstandard\n' >> "$KROOT/libkern/conf/files"
+    echo "PHY110 stub: registered in libkern/conf/files"
+  else
+    echo "PHY110 stub: already registered"
+  fi
+else
+  echo "PHY110 stub: libkern missing (KROOT=$KROOT)"
+fi
